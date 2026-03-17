@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="SignatureIDS.Core/SignatureIDS.Core.csproj" />
+  <Project Path="SignatureIDS.Infrastructure/SignatureIDS.Infrastructure.csproj" />
+  <Project Path="SignatureIDS.Worker/SignatureIDS.Worker.csproj" />
+</Solution>
