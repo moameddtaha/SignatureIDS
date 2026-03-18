@@ -36,7 +36,7 @@ Network Interface
       │                                                                                   ▲
       │  no match                                                                         │
       ▼                                                                                   │
- FlowFeatureExtractor — compute 35 flow features                                          │
+ FlowFeatureExtractor — compute 70 flow features                                          │
       │                                                                                   │
       ▼                                                                                   │
  MlForwarderService — HTTP POST to ML inference endpoint — attack confirmed ──────────────┘
@@ -45,7 +45,7 @@ Network Interface
 The detection pipeline is **two-layered**:
 
 1. **Signature layer** — every packet is matched against Snort-compatible rules stored in MongoDB. Rules are cached in-process with a 30-minute TTL so the hot path never hits the database. On a cache miss the service falls through to layer 2.
-2. **ML layer** — 35 flow features are extracted from the packet headers, serialised to CSV, and POSTed to an external ML inference service. If the model classifies the flow as an attack, an alert is raised.
+2. **ML layer** — 70 flow features are extracted from the packet headers, serialised to CSV, and POSTed to an external ML inference service. If the model classifies the flow as an attack, an alert is raised.
 
 Signature rules are pulled from [Emerging Threats](https://rules.emergingthreats.net/) on first startup and automatically re-synced every 7 days.
 
@@ -68,7 +68,7 @@ SignatureIDS.Worker.slnx
 |---|---|---|
 | `Worker` | Worker | Main `BackgroundService`; owns the packet capture loop |
 | `SignatureDetectionService` | Core | `MatchRule()` — early-exit matching: protocol → port → content |
-| `FlowFeatureExtractor` | Core | Extracts 35 ML-ready features from packet headers |
+| `FlowFeatureExtractor` | Core | Extracts 70 ML-ready features from packet headers |
 | `CsvWriter` | Core | Serialises `FlowFeatures` to a single CSV row |
 | `RulesSyncService` | Infrastructure | Seeds rules on startup; re-syncs from Emerging Threats every 7 days |
 | `MlForwarderService` | Infrastructure | HTTP POST of CSV row to the ML inference endpoint |
