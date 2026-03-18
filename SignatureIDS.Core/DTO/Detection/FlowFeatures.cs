@@ -17,12 +17,6 @@ public class FlowFeatures
     public int EceFlagNumber { get; set; }
     public int CwrFlagNumber { get; set; }
 
-    // Per-flow flag counts
-    public int AckCount { get; set; }
-    public int SynCount { get; set; }
-    public int FinCount { get; set; }
-    public int RstCount { get; set; }
-
     // Protocol indicators (0 or 1)
     public int Http { get; set; }
     public int Https { get; set; }
@@ -46,7 +40,6 @@ public class FlowFeatures
     public double Max { get; set; }
     public double Avg { get; set; }
     public double Std { get; set; }
-    public double TotSize { get; set; }
     public double Iat { get; set; }
     public int Number { get; set; }
     public double Variance { get; set; }
@@ -67,11 +60,7 @@ public class FlowFeatures
     public double InitWinBytesForward { get; set; }
     public double InitWinBytesBackward { get; set; }
 
-    // Flow-level flag counts
-    public int FinFlagCount { get; set; }
-    public int SynFlagCount { get; set; }
-    public int RstFlagCount { get; set; }
-    public int AckFlagCount { get; set; }
+    // Flow-level flags
     public int BwdPshFlags { get; set; }
 
     // Flow statistics
@@ -79,7 +68,6 @@ public class FlowFeatures
     public double TotalLengthOfFwdPackets { get; set; }
     public double TotalLengthOfBwdPackets { get; set; }
     public double FlowBytess { get; set; }
-    public double FlowPacketss { get; set; }
     public double FwdPacketss { get; set; }
     public double BwdPacketss { get; set; }
     public double AveragePacketSize { get; set; }

@@ -128,7 +128,7 @@ cp .env.example .env
 | Variable | Description | Example |
 |---|---|---|
 | `MONGO_CONNECTION_STRING` | MongoDB connection string | `mongodb://localhost:27017` |
-| `MONGO_DATABASE` | Database name | `SignatureIDS` |
+| `MONGODB_DATABASE_NAME` | Database name | `SignatureIDS` |
 | `ML_MODEL_URL` | ML inference endpoint (POST) | `http://localhost:5000/predict` |
 | `DASHBOARD_API_URL` | Dashboard alert endpoint (POST) | `http://localhost:8080/api/alerts` |
 | `NETWORK_INTERFACE` | Network interface to capture on | `eth0` |
