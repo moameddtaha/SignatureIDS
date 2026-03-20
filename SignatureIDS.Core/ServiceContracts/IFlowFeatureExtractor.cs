@@ -4,5 +4,5 @@ namespace SignatureIDS.Core.ServiceContracts;
 
 public interface IFlowFeatureExtractor
 {
-    FlowFeatures Extract(PacketHeaders headers);
+    FlowFeatures Extract(IReadOnlyList<PacketHeaders> headers);
 }

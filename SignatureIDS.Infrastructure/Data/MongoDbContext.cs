@@ -1,6 +1,5 @@
 ﻿using Microsoft.Extensions.Configuration;
 using MongoDB.Driver;
-using SharpPcap.Tunneling;
 using SignatureIDS.Core.Domain.Entity;
 using System;
 using System.Collections.Generic;
