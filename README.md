@@ -33,11 +33,11 @@ Network Interface
  ┌─── Task A: per-packet (real-time) ──────────────────────────────────────┐
  │    SignatureDetectionService                                             │
  │    — match Snort rules (proto → port → content)                         │
- │    — HIT → AlertDispatcherService → Dashboard API                       │
- │    — always enqueue packet into 5-second buffer                         │
+ │    — HIT → AlertDispatcherService → Dashboard API → clear buffer        │
+ │    — MISS → enqueue packet into 5-second buffer                         │
  └─────────────────────────────────────────────────────────────────────────┘
       │
-      │  every 5 seconds
+      │  every 5 seconds (only runs if no signature hit cleared the buffer)
       ▼
  ┌─── Task B: per-flow window (ML) ────────────────────────────────────────┐
  │    Drain buffer → aggregate all packets in window                       │
@@ -49,10 +49,8 @@ Network Interface
 
 The detection pipeline is **two-layered, running concurrently**:
 
-1. **Signature layer (Task A)** — every packet is checked immediately as it arrives against Snort-compatible rules stored in MongoDB. Rules are cached in-process with a 30-minute TTL so the hot path never hits the database. Fires an alert instantly on a hit.
-2. **ML layer (Task B)** — packets are buffered for 5 seconds. At the end of each window the buffer is aggregated into a single flow, 60 features are extracted, and the XGBoost model runs inference **in-process** (no HTTP call, no external service). Catches threats that have no matching signature.
-
-Both tasks run for the lifetime of the service. A packet that triggers a signature hit is still buffered so the ML layer sees the full traffic picture.
+1. **Signature layer (Task A)** — every packet is checked immediately as it arrives against Snort-compatible rules stored in MongoDB. Rules are cached in-process with a 30-minute TTL so the hot path never hits the database. On a hit: fires an alert instantly and clears the buffer so the ML layer starts fresh.
+2. **ML layer (Task B)** — packets that pass signature detection are buffered for 5 seconds. At the end of each window the buffer is aggregated into a single flow, 60 features are extracted, and the XGBoost model runs inference **in-process** (no HTTP call, no external service). Only runs when the signature layer has not already caught something — no wasted computation, no duplicate alerts.
 
 Signature rules are pulled from [Emerging Threats](https://rules.emergingthreats.net/) on first startup and automatically re-synced every 7 days.
 
