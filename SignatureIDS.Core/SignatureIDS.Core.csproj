@@ -8,7 +8,6 @@
 
   <ItemGroup>
     <Folder Include="DTO\Rules\" />
-    <Folder Include="Services\" />
   </ItemGroup>
 
 </Project>

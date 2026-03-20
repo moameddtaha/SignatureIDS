@@ -33,10 +33,10 @@ Network Interface
  │    SignatureDetectionService                                             │
  │    — match Snort rules (proto → port → content)                         │
  │    — HIT → AlertDispatcherService → Dashboard API → clear buffer        │
- │    — MISS → enqueue packet into 5-second buffer                         │
+ │    — MISS → enqueue packet into 8-second buffer                         │
  └─────────────────────────────────────────────────────────────────────────┘
       │
-      │  every 5 seconds (only runs if no signature hit cleared the buffer)
+      │  every 8 seconds (only runs if no signature hit cleared the buffer)
       ▼
  ┌─── Task B: per-flow window (ML) ────────────────────────────────────────┐
  │    Drain buffer → aggregate all packets in window                       │
@@ -50,7 +50,7 @@ Network Interface
 The detection pipeline is **two-layered, running concurrently**:
 
 1. **Signature layer (Task A)** — every packet is checked immediately as it arrives against Snort-compatible rules stored in MongoDB. Rules are cached in-process with a 30-minute TTL so the hot path never hits the database. On a hit: fires an alert instantly and clears the buffer so the ML layer starts fresh.
-2. **ML layer (Task B)** — packets that pass signature detection are buffered for 5 seconds. At the end of each window the buffer is aggregated into a single flow, 60 features are extracted, serialized to CSV, and POSTed to the external ML inference API. Only runs when the signature layer has not already caught something — no wasted computation, no duplicate alerts.
+2. **ML layer (Task B)** — packets that pass signature detection are buffered for 8 seconds. At the end of each window the buffer is aggregated into a single flow, 60 features are extracted, serialized to CSV, and POSTed to the external ML inference API. Only runs when the signature layer has not already caught something — no wasted computation, no duplicate alerts.
 
 Signature rules are pulled from [Emerging Threats](https://rules.emergingthreats.net/) on first startup and automatically re-synced every 7 days.
 
