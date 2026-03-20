@@ -4,7 +4,7 @@ using System.Text;
 
 namespace SignatureIDS.Infrastructure.Repositories
 {
-    internal class RulesRepository
+    public class RulesRepository
     {
     }
 }
