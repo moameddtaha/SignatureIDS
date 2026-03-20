@@ -17,4 +17,5 @@ public class PacketHeaders
     public bool PshFlag { get; set; }
     public bool AckFlag { get; set; }
     public int? WindowSize { get; set; }
+    public bool IsArpReply { get; set; }
 }
