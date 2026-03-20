@@ -1,6 +1,6 @@
 # SignatureIDS Worker
 
-A headless **.NET 10 Worker Service** for real-time network intrusion detection. It combines **Snort-style signature matching** with an **in-process XGBoost ML fallback** (via ONNX) to detect threats at wire speed, then forwards confirmed alerts to a central dashboard.
+A headless **.NET 10 Worker Service** for real-time network intrusion detection. It combines **Snort-style signature matching** with a **LightGBM ML fallback** to detect threats at wire speed, then forwards confirmed alerts to a central dashboard.
 
 ---
 
@@ -11,7 +11,6 @@ A headless **.NET 10 Worker Service** for real-time network intrusion detection.
 - [Tech Stack](#tech-stack)
 - [Prerequisites](#prerequisites)
 - [Configuration](#configuration)
-- [ML Model Setup](#ml-model-setup)
 - [Running Locally](#running-locally)
 - [Docker](#docker)
 - [Logging & Observability](#logging--observability)
@@ -42,7 +41,8 @@ Network Interface
  ┌─── Task B: per-flow window (ML) ────────────────────────────────────────┐
  │    Drain buffer → aggregate all packets in window                       │
  │    FlowFeatureExtractor — compute 60 flow features                      │
- │    OnnxInferenceService — in-process XGBoost inference (model.onnx)     │
+ │    CsvWriter — serialize features to CSV row                            │
+ │    MlForwarderService — HTTP POST CSV to ML inference API               │
  │    — attack confirmed → AlertDispatcherService → Dashboard API          │
  └─────────────────────────────────────────────────────────────────────────┘
 ```
@@ -50,7 +50,7 @@ Network Interface
 The detection pipeline is **two-layered, running concurrently**:
 
 1. **Signature layer (Task A)** — every packet is checked immediately as it arrives against Snort-compatible rules stored in MongoDB. Rules are cached in-process with a 30-minute TTL so the hot path never hits the database. On a hit: fires an alert instantly and clears the buffer so the ML layer starts fresh.
-2. **ML layer (Task B)** — packets that pass signature detection are buffered for 5 seconds. At the end of each window the buffer is aggregated into a single flow, 60 features are extracted, and the XGBoost model runs inference **in-process** (no HTTP call, no external service). Only runs when the signature layer has not already caught something — no wasted computation, no duplicate alerts.
+2. **ML layer (Task B)** — packets that pass signature detection are buffered for 5 seconds. At the end of each window the buffer is aggregated into a single flow, 60 features are extracted, serialized to CSV, and POSTed to the external ML inference API. Only runs when the signature layer has not already caught something — no wasted computation, no duplicate alerts.
 
 Signature rules are pulled from [Emerging Threats](https://rules.emergingthreats.net/) on first startup and automatically re-synced every 7 days.
 
@@ -63,7 +63,7 @@ Three-project **Clean Architecture** — dependencies only point inward:
 ```
 SignatureIDS.Worker.slnx
 ├── SignatureIDS.Core            — Domain entities, DTOs, interfaces, pure service logic (zero NuGet deps)
-├── SignatureIDS.Infrastructure  — MongoDB repositories, ONNX inference, RulesSyncService, AlertDispatcherService
+├── SignatureIDS.Infrastructure  — MongoDB repositories, HTTP clients, RulesSyncService, AlertDispatcherService
 └── SignatureIDS.Worker          — Composition root: DI wiring, Serilog bootstrap, hosted services
 ```
 
@@ -75,18 +75,20 @@ SignatureIDS.Worker.slnx
 | `PacketCaptureService` | Infrastructure | Opens SharpPcap device, parses raw frames → `PacketHeaders`, fires callback |
 | `SignatureDetectionService` | Core | Per-packet early-exit matching: protocol → port → content |
 | `FlowFeatureExtractor` | Core | Aggregates a 5-second packet window into 60 ML flow features |
-| `OnnxInferenceService` | Infrastructure | Loads `model.onnx` at startup; runs in-process XGBoost inference |
+| `CsvWriter` | Core | Serialises `FlowFeatures` to a CSV row string |
+| `MlForwarderService` | Infrastructure | HTTP POST of CSV row to the ML inference API |
 | `RulesSyncService` | Infrastructure | Seeds rules on startup; re-syncs from Emerging Threats every 7 days |
 | `AlertDispatcherService` | Infrastructure | HTTP POST of `AlertDto` to the Dashboard API |
 
 ### ML Classification Labels
 
-| Index | Label | Meaning |
-|---|---|---|
-| 0 | `NORMAL` | Benign traffic |
-| 1 | `BRUTE` | Brute-force attack |
-| 2 | `RECON` | Reconnaissance / scanning |
-| 3 | `DOS` | Denial-of-service |
+| Label | Meaning |
+|---|---|
+| `NORMAL` | Benign traffic — no alert raised |
+| `BRUTE` | Brute-force attack |
+| `RECON` | Reconnaissance / scanning |
+| `DOS` | Denial-of-service |
+| `ARP` | ARP spoofing attack |
 
 ### Data Flow — Alert Object
 
@@ -109,7 +111,6 @@ Packet captured
 | SharpPcap | 6.3.1 | Cross-platform raw packet capture |
 | PacketDotNet | 1.4.8 | Packet dissection (Ethernet, IP, TCP, UDP) |
 | MongoDB.Driver | 3.7.0 | Rules storage and caching |
-| Microsoft.ML.OnnxRuntime | 1.20.x | In-process ONNX model inference |
 | Serilog | 10.0 | Structured logging — console + rolling file sinks |
 | DotNetEnv | 3.1.1 | `.env` file loading at startup |
 | Microsoft.Extensions.Caching.Memory | 10.0 | In-process rule cache (30-min TTL) |
@@ -125,14 +126,14 @@ Packet captured
 | Npcap (Windows) | [npcap.com](https://npcap.com/#download) — install in **WinPcap-compatible mode** |
 | libpcap (Linux) | `sudo apt install libpcap-dev` |
 | libpcap (macOS) | `brew install libpcap` |
-| `model.onnx` | Converted from trained XGBoost `.pkl` — see [ML Model Setup](#ml-model-setup) |
+| ML inference API | Flask or FastAPI endpoint accepting a CSV row, returning a prediction |
 | Dashboard API | HTTP endpoint accepting `AlertDto` JSON payloads |
 
 ---
 
 ## Configuration
 
-The service is configured via a `.env` file loaded at startup by DotNetEnv, combined with `appsettings.json`.
+The service is configured via a `.env` file loaded at startup by DotNetEnv, combined with `appsettings.json` for log levels.
 
 Copy `.env.example` to `.env` and fill in your values — **never commit `.env`**:
 
@@ -144,18 +145,9 @@ cp .env.example .env
 |---|---|---|
 | `MONGO_CONNECTION_STRING` | MongoDB connection string | `mongodb://localhost:27017` |
 | `MONGODB_DATABASE_NAME` | Database name | `SignatureIDS` |
+| `ML_MODEL_URL` | ML inference endpoint (POST) | `http://localhost:5000/predict` |
 | `DASHBOARD_API_URL` | Dashboard alert endpoint (POST) | `http://localhost:8080/api/alerts` |
 | `NETWORK_INTERFACE` | Network interface to capture on | `eth0` |
-
-`appsettings.json` holds the ONNX model path:
-
-```json
-{
-  "Ml": {
-    "ModelPath": "Models/model.onnx"
-  }
-}
-```
 
 > **Finding your interface name**
 >
@@ -174,42 +166,6 @@ cp .env.example .env
 
 ---
 
-## ML Model Setup
-
-The ML layer uses an XGBoost model converted to ONNX format. Conversion is a **one-time operation** done in Python — after that the `.onnx` file is used by C# directly forever.
-
-### Step 1 — Install Python dependencies
-
-```bash
-pip install xgboost skl2onnx onnxmltools numpy
-```
-
-### Step 2 — Run the conversion script
-
-Place your trained `model.pkl` next to `convert_to_onnx.py` at the solution root, then run:
-
-```bash
-python convert_to_onnx.py
-```
-
-This produces `model.onnx`. No retraining — the weights are preserved exactly.
-
-### Step 3 — Place the model file
-
-Copy `model.onnx` into the Worker project's `Models/` directory:
-
-```
-SignatureIDS.Worker/
-└── Models/
-    └── model.onnx      ← place it here
-```
-
-The build system copies it to the output directory automatically.
-
-> **Important:** The feature order in `OnnxInferenceService.ToFloatArray()` must match the column order your model was trained on. Verify this against your training dataset before deploying.
-
----
-
 ## Running Locally
 
 ```bash
@@ -221,9 +177,7 @@ cd signatureids-worker
 cp .env.example .env
 # edit .env with your values
 
-# 3. Place model.onnx in SignatureIDS.Worker/Models/
-
-# 4. Restore & run
+# 3. Restore & run
 dotnet restore
 dotnet run --project SignatureIDS.Worker
 ```
@@ -239,7 +193,6 @@ On startup you will see:
 
 ```
 [INF] SignatureIDS Worker starting
-[INF] ONNX model loaded from Models/model.onnx
 [INF] RulesSyncService: seeding rules from Emerging Threats...
 [INF] RulesSyncService: loaded 12,483 rules into MongoDB
 [INF] Rule cache warmed — 12,483 rules active
@@ -344,7 +297,7 @@ docker compose up --build -d worker
 | `Interface 'eth0' not found` | Wrong interface name in `.env` | List interfaces: `docker run --rm --network host signatureids-worker:latest ip link show` |
 | Worker exits immediately after start | MongoDB not ready | Check `docker compose ps` — wait for `mongodb` to show `healthy` |
 | `Connection refused` to Dashboard | Wrong URL or service not running | Check `DASHBOARD_API_URL` in `.env` |
-| `model.onnx not found` | Model file not placed in `Models/` | See [ML Model Setup](#ml-model-setup) |
+| `Connection refused` to ML API | ML inference service not running | Check `ML_MODEL_URL` in `.env` |
 | Rules not loading | No outbound internet access | Check host firewall; run `docker compose logs worker` for details |
 | High CPU on first start | Initial Emerging Threats sync | Normal — settles once the rule download completes |
 
