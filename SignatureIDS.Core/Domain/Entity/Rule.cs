@@ -6,7 +6,6 @@ namespace SignatureIDS.Core.Domain.Entity
 {
     public class Rule
     {
-        public string Id { get; set; } = string.Empty;
         public int Sid { get; set; }
         public string Msg { get; set; } = string.Empty;
         public string Proto { get; set; } = string.Empty;

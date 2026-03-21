@@ -1,6 +1,9 @@
+using DotNetEnv;
 using Serilog;
 using SignatureIDS.Worker;
 using SignatureIDS.Worker.StartupExtensions;
+
+Env.Load();
 
 Log.Logger = new LoggerConfiguration()
     .WriteTo.Console()

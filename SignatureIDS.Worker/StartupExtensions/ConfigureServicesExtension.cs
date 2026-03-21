@@ -11,6 +11,11 @@ namespace SignatureIDS.Worker.StartupExtensions
         public static void ConfigureServices(this IServiceCollection services, IConfiguration configuration)
         {
             // ========================================
+            // CACHE
+            // ========================================
+            services.AddMemoryCache();
+
+            // ========================================
             // MONGODB
             // ========================================
             services.AddSingleton<MongoDbContext>();
@@ -25,6 +30,7 @@ namespace SignatureIDS.Worker.StartupExtensions
             // ========================================
             services.AddHttpClient<IRulesSyncService, RulesSyncService>();
             services.AddHttpClient<IAlertDispatcherService, AlertDispatcherService>();
+            services.AddHttpClient<IMlForwarderService, MlForwarderService>();
 
             // ========================================
             // SERVICES
@@ -32,6 +38,7 @@ namespace SignatureIDS.Worker.StartupExtensions
             services.AddSingleton<IPacketCaptureService, PacketCaptureService>();
             services.AddSingleton<ISignatureDetectionService, SignatureDetectionService>();
             services.AddSingleton<IFlowFeatureExtractor, FlowFeatureExtractor>();
+            services.AddSingleton<ICsvSerializer, CsvSerializer>();
 
             // ========================================
             // WORKER

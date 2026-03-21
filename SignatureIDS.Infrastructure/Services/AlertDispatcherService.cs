@@ -1,4 +1,5 @@
-﻿using Microsoft.Extensions.Logging;
+﻿using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 using SignatureIDS.Core.DTO.Detection;
 using SignatureIDS.Core.ServiceContracts;
 using System.Net.Http.Json;
@@ -8,22 +9,23 @@ namespace SignatureIDS.Infrastructure.Services
 {
     public class AlertDispatcherService : IAlertDispatcherService
     {
-        private const string AlertsEndpoint = "api/alerts";
-
         private readonly HttpClient _http;
         private readonly ILogger<AlertDispatcherService> _logger;
+        private readonly string _endpoint;
 
-        public AlertDispatcherService(IHttpClientFactory factory, ILogger<AlertDispatcherService> logger)
+        public AlertDispatcherService(HttpClient http, ILogger<AlertDispatcherService> logger, IConfiguration configuration)
         {
-            _http = factory.CreateClient("DashboardApi");
+            _http = http;
             _logger = logger;
+            _endpoint = configuration["DashboardApi:BaseUrl"]
+                ?? throw new InvalidOperationException("DashboardApi:BaseUrl is not configured.");
         }
 
         public async Task SendAsync(Alert alert)
         {
             try
             {
-                var response = await _http.PostAsJsonAsync(AlertsEndpoint, alert);
+                var response = await _http.PostAsJsonAsync($"{_endpoint}/api/alerts", alert);
 
                 if (response.IsSuccessStatusCode)
                 {

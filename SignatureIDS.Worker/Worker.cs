@@ -11,6 +11,9 @@ namespace SignatureIDS.Worker
         private readonly IPacketCaptureService _capture;
         private readonly ISignatureDetectionService _detection;
         private readonly IAlertDispatcherService _alertDispatcher;
+        private readonly IFlowFeatureExtractor _featureExtractor;
+        private readonly ICsvSerializer _csvSerializer;
+        private readonly IMlForwarderService _mlForwarder;
         private readonly IConfiguration _config;
 
         private readonly Channel<PacketHeaders> _channel = Channel.CreateUnbounded<PacketHeaders>();
@@ -24,6 +27,9 @@ namespace SignatureIDS.Worker
             IPacketCaptureService capture,
             ISignatureDetectionService detection,
             IAlertDispatcherService alertDispatcher,
+            IFlowFeatureExtractor featureExtractor,
+            ICsvSerializer csvSerializer,
+            IMlForwarderService mlForwarder,
             IConfiguration config)
         {
             _logger = logger;
@@ -31,6 +37,9 @@ namespace SignatureIDS.Worker
             _capture = capture;
             _detection = detection;
             _alertDispatcher = alertDispatcher;
+            _featureExtractor = featureExtractor;
+            _csvSerializer = csvSerializer;
+            _mlForwarder = mlForwarder;
             _config = config;
         }
 
@@ -75,7 +84,21 @@ namespace SignatureIDS.Worker
 
                 if ((DateTime.UtcNow - _bufferStart).TotalSeconds >= MlWindowSeconds)
                 {
-                    // TODO: forward _mlBuffer to ML service
+                    if (_mlBuffer.Count > 0)
+                    {
+                        var features = _featureExtractor.Extract(_mlBuffer);
+                        var csv = _csvSerializer.WriteRow(features);
+                        var mlResult = await _mlForwarder.ForwardAsync(csv);
+
+                        if (mlResult.IsAttack && mlResult.Alert is not null)
+                        {
+                            mlResult.Alert.DetectionSource = "ML";
+                            await _alertDispatcher.SendAsync(mlResult.Alert);
+                            _logger.LogWarning("ML alert: {AttackType} {SrcIp} -> {DstIp}",
+                                mlResult.AttackType, mlResult.Alert.SrcIp, mlResult.Alert.DstIp);
+                        }
+                    }
+
                     _mlBuffer.Clear();
                     _bufferStart = DateTime.UtcNow;
                 }
