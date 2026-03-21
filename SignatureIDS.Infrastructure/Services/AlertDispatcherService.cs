@@ -15,7 +15,7 @@ namespace SignatureIDS.Infrastructure.Services
 
         public AlertDispatcherService(IHttpClientFactory factory, ILogger<AlertDispatcherService> logger)
         {
-            _http = factory.CreateClient("DashbaordApi");
+            _http = factory.CreateClient("DashboardApi");
             _logger = logger;
         }
 

@@ -19,8 +19,8 @@ namespace SignatureIDS.Infrastructure.Repositories
 
         public async Task DisableAsync(int sid)
         {
-            var Update = Builders<Rule>.Update.Set(r => r.Enable, false);
-            await _rules.UpdateOneAsync(r => r.Sid == sid, Update);
+            var update = Builders<Rule>.Update.Set(r => r.Enable, false);
+            await _rules.UpdateOneAsync(r => r.Sid == sid, update);
         }
 
         public async Task<List<Rule>> GetAllEnabledAsync()
