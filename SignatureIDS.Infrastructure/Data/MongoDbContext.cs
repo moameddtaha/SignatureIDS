@@ -21,5 +21,6 @@ namespace SignatureIDS.Infrastructure.Data
         }
 
         public IMongoCollection<Rule> Rules => _database.GetCollection<Rule>("Rules");
+        public IMongoCollection<SyncMetadata> SyncMetadata => _database.GetCollection<SyncMetadata>("SyncMetadata");
     }
 }

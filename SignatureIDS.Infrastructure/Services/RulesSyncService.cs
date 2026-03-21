@@ -1,6 +1,8 @@
-﻿using SignatureIDS.Core.Domain.Entity;
+﻿using MongoDB.Driver;
+using SignatureIDS.Core.Domain.Entity;
 using SignatureIDS.Core.ServiceContracts;
 using SignatureIDS.Core.ServiceContracts.Repositories;
+using SignatureIDS.Infrastructure.Data;
 using System.Formats.Tar;
 using System.IO.Compression;
 using System.Text;
@@ -12,17 +14,27 @@ namespace SignatureIDS.Infrastructure.Services
     {
         private readonly HttpClient _http;
         private readonly IRulesRepository _repo;
+        private readonly MongoDbContext _context;
 
         private const string RulesUrl = "https://rules.emergingthreats.net/open/snort-2.9.0/emerging.rules.tar.gz";
+        private const int SyncIntervalDays = 7;
 
-        public RulesSyncService(HttpClient http, IRulesRepository repo)
+        public RulesSyncService(HttpClient http, IRulesRepository repo, MongoDbContext context)
         {
             _http = http;
             _repo = repo;
+            _context = context;
         }
 
         public async Task SyncNowAsync(CancellationToken ct = default)
         {
+            var metadata = await _context.SyncMetadata
+                .Find(m => m.Id == "rules_sync")
+                .FirstOrDefaultAsync(ct);
+
+            if (metadata is not null && (DateTime.UtcNow - metadata.LastSyncedAt).TotalDays < SyncIntervalDays)
+                return;
+
             using var response = await _http.GetAsync(RulesUrl, HttpCompletionOption.ResponseHeadersRead, ct);
             response.EnsureSuccessStatusCode();
 
@@ -56,10 +68,14 @@ namespace SignatureIDS.Infrastructure.Services
                 }
             }
 
-            if (batch.Count > 0) 
-            {
+            if (batch.Count > 0)
                 await _repo.BulkUpsertAsync(batch);
-            }
+
+            await _context.SyncMetadata.ReplaceOneAsync(
+                m => m.Id == "rules_sync",
+                new SyncMetadata { Id = "rules_sync", LastSyncedAt = DateTime.UtcNow },
+                new ReplaceOptions { IsUpsert = true },
+                ct);
         }
 
         private static Rule? ParseRule(string line)
