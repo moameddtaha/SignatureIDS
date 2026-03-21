@@ -1,7 +1,8 @@
 using SignatureIDS.Worker;
+using SignatureIDS.Worker.StartupExtensions;
 
 var builder = Host.CreateApplicationBuilder(args);
-builder.Services.AddHostedService<Worker>();
+builder.Services.ConfigureServices(builder.Configuration);
 
 var host = builder.Build();
 host.Run();

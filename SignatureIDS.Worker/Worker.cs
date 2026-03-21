@@ -1,16 +1,84 @@
+using SignatureIDS.Core.DTO.Detection;
+using SignatureIDS.Core.ServiceContracts;
+using System.Threading.Channels;
+
 namespace SignatureIDS.Worker
 {
-    public class Worker(ILogger<Worker> logger) : BackgroundService
+    public class Worker : BackgroundService
     {
+        private readonly ILogger<Worker> _logger;
+        private readonly IRulesSyncService _rulesSync;
+        private readonly IPacketCaptureService _capture;
+        private readonly ISignatureDetectionService _detection;
+        private readonly IAlertDispatcherService _alertDispatcher;
+        private readonly IConfiguration _config;
+
+        private readonly Channel<PacketHeaders> _channel = Channel.CreateUnbounded<PacketHeaders>();
+
+        private readonly List<PacketHeaders> _mlBuffer = [];
+        private DateTime _bufferStart = DateTime.UtcNow;
+        private const int MlWindowSeconds = 8;
+
+        public Worker(ILogger<Worker> logger,
+            IRulesSyncService rulesSync,
+            IPacketCaptureService capture,
+            ISignatureDetectionService detection,
+            IAlertDispatcherService alertDispatcher,
+            IConfiguration config)
+        {
+            _logger = logger;
+            _rulesSync = rulesSync;
+            _capture = capture;
+            _detection = detection;
+            _alertDispatcher = alertDispatcher;
+            _config = config;
+        }
+
         protected override async Task ExecuteAsync(CancellationToken stoppingToken)
         {
-            while (!stoppingToken.IsCancellationRequested)
+            _logger.LogInformation("Syncing rules...");
+            await _rulesSync.SyncNowAsync(stoppingToken);
+            _logger.LogInformation("Rules synced.");
+
+            var iface = _config["Capture:Interface"] ?? throw new Exception("Capture:Interface config value is required");
+
+            _capture.StartCapture(iface, packet => _channel.Writer.TryWrite(packet));
+            _logger.LogInformation("Packet capture started on interface {Interface}", iface);
+
+            await foreach (var packet in _channel.Reader.ReadAllAsync(stoppingToken))
             {
-                if (logger.IsEnabled(LogLevel.Information))
+                var result = await _detection.DetectAsync(packet);
+
+                if (result is { IsMatch: true, MatchedRule: not null })
                 {
-                    logger.LogInformation("Worker running at: {time}", DateTimeOffset.Now);
+                    var rule = result.MatchedRule;
+                    var alert = new Alert
+                    {
+                        Timestamp = packet.Timestamp,
+                        Sid = rule.Sid,
+                        Msg = rule.Msg,
+                        SrcIp = packet.SrcIp,
+                        DstIp = packet.DstIp,
+                        SrcPort = packet.SrcPort,
+                        DstPort = packet.DstPort,
+                        Protocol = packet.Protocol,
+                        DetectionSource = "Signature"
+                    };
+
+                    await _alertDispatcher.SendAsync(alert);
+                    _logger.LogInformation("Alert dispatched for SID {Sid}: {Msg} {SrcIp} -> {DstIp}", rule.Sid, rule.Msg, alert.SrcIp, alert.DstIp);
                 }
-                await Task.Delay(1000, stoppingToken);
+                else
+                {
+                    _mlBuffer.Add(packet);
+                }
+
+                if ((DateTime.UtcNow - _bufferStart).TotalSeconds >= MlWindowSeconds)
+                {
+                    // TODO: forward _mlBuffer to ML service
+                    _mlBuffer.Clear();
+                    _bufferStart = DateTime.UtcNow;
+                }
             }
         }
     }
