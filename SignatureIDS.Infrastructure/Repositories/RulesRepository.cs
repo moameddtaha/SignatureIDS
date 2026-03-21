@@ -44,5 +44,16 @@ namespace SignatureIDS.Infrastructure.Repositories
                 rule,
                 new ReplaceOptions { IsUpsert = true });
         }
+
+        public async Task BulkUpsertAsync(IEnumerable<Rule> rules)
+        {
+            var requests = rules.Select(rule =>
+                new ReplaceOneModel<Rule>(
+                    Builders<Rule>.Filter.Eq(r => r.Sid, rule.Sid),
+                    rule)
+                { IsUpsert = true });
+
+            await _rules.BulkWriteAsync(requests);
+        }
     }
 }

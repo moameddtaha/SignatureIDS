@@ -19,7 +19,7 @@ namespace SignatureIDS.Infrastructure.Services
             _logger = logger;
         }
 
-        public async Task SendAsync(AlertDto alert)
+        public async Task SendAsync(Alert alert)
         {
             try
             {

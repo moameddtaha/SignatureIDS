@@ -1,6 +1,6 @@
 namespace SignatureIDS.Core.DTO.Detection;
 
-public class AlertDto
+public class Alert
 {
     public DateTime Timestamp { get; set; } = DateTime.UtcNow;
     public int? Sid { get; set; }

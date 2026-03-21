@@ -8,7 +8,7 @@ namespace SignatureIDS.Core.ServiceContracts
     /// <summary>
     /// Captures live network packets from a specified network interface.
     /// </summary>
-    public interface IPacketCaptureService : IDisposable
+    public interface IPacketCaptureService
     {
         /// <summary>
         /// Starts capturing packets on the given network interface and invokes the callback for each captured packet.

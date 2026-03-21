@@ -28,6 +28,12 @@ namespace SignatureIDS.Core.ServiceContracts.Repositories
         Task UpsertAsync(Rule rule);
 
         /// <summary>
+        /// Inserts or updates a batch of rules in a single database operation.
+        /// </summary>
+        /// <param name="rules">The rules to insert or update.</param>
+        Task BulkUpsertAsync(IEnumerable<Rule> rules);
+
+        /// <summary>
         /// Marks the rule with the given Snort ID as disabled.
         /// </summary>
         /// <param name="sid">The Snort rule ID to disable.</param>

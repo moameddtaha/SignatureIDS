@@ -1,6 +1,6 @@
 namespace SignatureIDS.Core.DTO.Rules;
 
-public class RuleDto
+public class Rule
 {
     public int Sid { get; set; }
     public string Msg { get; set; } = string.Empty;
